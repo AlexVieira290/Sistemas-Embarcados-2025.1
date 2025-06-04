@@ -16,6 +16,7 @@ Este protótipo tem como objetivo replicar algumas características que serão n
 	- sc_timer_service.cpp (Gerado utilizando ITEMIS)
 	- sc_timer_service.h
 - Geração de código ITEMIS (C++).
+- Interface grafica de comando UART via rasp.
 
 ## Projeto prototipo
  ![ITEMIS](ITEMIS_PROT.PNG)
@@ -28,3 +29,5 @@ B -- "3"  --> E((pisca_Lento))
 C -- "STOP"  --> B
 D -- "STOP"  --> B
 E -- "STOP"  --> B
+```
+ ![RASP-INTERFACE](RASP_PROT.PNG)
