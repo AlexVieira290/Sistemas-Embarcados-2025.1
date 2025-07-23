@@ -80,4 +80,46 @@ Ao executar curvas customizadas, o processo foi desenhado de forma muito semelha
  #
 ![OPERATION](Imagens/ITEMIS_OPR_CUSTOM.PNG)
 #
+Para que este fluxo funcione corretamente foram necessárias estabelecer algumas variáveis, eventos e operações:
 
+|Variáveis|objetivo|
+|----------------|-------------------------------|
+|const low : integer = 0	| utilizada para padronizar o parse de dados para o arduino IDE|
+|const high : integer = 1	|utilizada para padronizar o parse de dados para o arduino IDE|
+|const Bomba_pin : integer = 2	|utilizada para o GPIO da Bomba|
+|const mixer_pin : integer = 4	|utilizada para o GPIO do mixer|
+|const pwm_pin : integer = 18	|utilizada para o GPIO do PWM|
+|const erro_pin : integer = 16	|utilizada para o GPIO de alerta de erro|
+|var pontoIndex: integer = 0	|utilizado para navegar no struct de degraus|
+|var comand : string		|utilizado durante o parse de comandos UART|
+|var temp : string		|utilizado como variavél de transição|
+#
+|Eventos|objetivo|
+|----------------|-------------------------------|
+|in event degrau_ok	|sinaliza a termino do aquecimento|
+|in event manutencao_ok	|sinaliza a termino da temporização|
+|in event novo_degrau	|sinaliza que o struct possui outro degrau|
+|in event ultimo_degrau	|sinaliza a termino do processo|
+|in event errodetectado	|sinaliza erros em geral|
+#
+|Operações|objetivo|
+|----------------|-------------------------------|
+|operation digitalWrite(pin: integer, value: integer)              | controla um GPIO (padrão arduito IDE)|
+|operation pinMode(pin: integer, mode: integer)                    | controla um GPIO (padrão arduito IDE)|
+|operation UART_config()                                           | executa o setup da UART|
+|operation UART_print(mensagem: string)                            | executa uma escrita UART|
+|operation UART_read() : string                                    | executa uma leitura UART|
+|operation getCommand() : string                                   | coleta a ultima leitura da UART |
+|operation carregarCurvaDefault()                                  | carrega a curva padrão durante inicialização|
+|operation carregarCurvaTemperatura(mensagem: string) : string     | carrega a nova curva personalizada para o sistema|
+|operation imprimirCurvaPersonalizada()                            | imprima a curva carregada, utilizada para debug|
+|operation iniciarLeituraTemperatura()                             | inicia a task de leitura de sensores|
+|operation pararLeituraTemperatura()                               | finaliza a task de leitura de sensores|
+|operation setupPWM()                                              | executa o setup do PWM durante a inicialização|
+|operation iniciarTaskDegrau(curvaId: integer)                     | inicia a task de aquecimento, utiliza a temperatura lida para realizar o controle PID|
+|operation iniciarTaskManutencao(curvaId: integer)                 | inicia a task de manutenção da temperatura, mantem o controle PID e realiza o controle de tempo|
+|operation encerrarTaskDegrau()                                    | encerra task de aquecimento(substituída por finalização orientada a evento dentro da task)|
+|operation encerrarTaskManutencao()                                | encerra task de manutenção(substituída por finalização orientada a evento dentro da task)|
+|operation verificarProximoDegrau(curvaId: integer)                | verifica a existência de um próximo degrau|
+#
+Estas operações foram posteriormente implementadas nos código **CallbackController.cpp** e **CallbackController.H**
