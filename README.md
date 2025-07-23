@@ -60,3 +60,24 @@ Devido a estratégia de operação via interface gráfica, os estados ADD e EDIT
 ![ADD](Imagens/ITEMIS_CFG_ADD.PNG)
 ![EDIT](Imagens/ITEMIS_CFG_EDIT.PNG)
 #
+O bloco de operação foi dividido de forma que o usuário possa escolher executar a curva pré estabelecida no sistema ou executar uma das curvas criadas posteriormente.
+#
+![OPERATION](Imagens/ITEMIS_OPR.PNG)
+#
+Ao executar a curva pré configurada o processo ocorre conforme a seguir:
+- Inicializa uma variável para navegar na curva default;
+- Inicializa a leitura dos sensores de temperatura i2C, alterado posteriormente para UART;
+- Inicia a etapa de controle/aquecimento, para chegar a temperatura desejada;
+- Inicia a etapa para manter a temperatura pelo tempo determinado após alcançar a temperatura desejada
+- Verificar se existe uma nova temperatura:
+	- Caso exista, reinicia o processo com o novo alvo;
+	- Caso não exista, encerra o processo e retorna ao menu principal;
+- Tambem foi adicionado um estado de erro, que em caso de problemas pode ser acionada por todas as etapas principais;
+ #
+![OPERATION](Imagens/ITEMIS_OPR_DEFAULT.PNG)
+#
+Ao executar curvas customizadas, o processo foi desenhado de forma muito semelhante, com apenas um passo a mais, uma verificação se a curva personalizada possui pelo menos um degrau.
+ #
+![OPERATION](Imagens/ITEMIS_OPR_CUSTOM.PNG)
+#
+
