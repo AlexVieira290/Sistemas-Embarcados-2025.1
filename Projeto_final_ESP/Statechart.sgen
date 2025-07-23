@@ -1,0 +1,18 @@
+GeneratorModel for create::cpp98 {
+
+	const PROJECT : string = "Projeto_final_v4"
+
+	const FOLDER : string = "src-gen"
+
+	statechart Statechart {
+
+		feature Outlet {
+			targetProject = PROJECT
+			targetFolder = FOLDER
+			libraryTargetFolder = "src"
+		}
+		feature GeneralFeatures {
+    		timerService = true
+		}
+	}
+}
