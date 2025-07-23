@@ -41,7 +41,7 @@ Anotações/Sugestões discutidas em sala:
 Durante esta etapa foi desenvolvido a estrutura inicial que determina o funcionamento do sistema, esta foi implementada através de um statechart criado utilizando o software Itemis.
 O primeiro bloco implementado foi o fluxo de inicialização e de seleção de operação;
 #
-![MAIN](imagens/ITEMIS_MAIN.PNG)
+![MAIN](Imagens/ITEMIS_MAIN.PNG)
 > As funções mostradas na imagem foram sendo adicionadas ao longo da execução projeto e serão detalhadas mais a diante. 
 #
 A imagem acima mostra o fluxo de operação imaginado para o projeto:
@@ -50,13 +50,13 @@ A imagem acima mostra o fluxo de operação imaginado para o projeto:
 - Configuration: aciona as funções que permitirão ao usuário adicionar ou editar curvas de temperatura ao sistema;
 - Operation: permite ao usuário iniciar a execução das curvas configuradas;
 #
-![Configuration](imagens/ITEMIS_MAIN.PNG)
+![Configuration](Imagens/ITEMIS_MAIN.PNG)
 #
 O bloco de configuração foi dividido de forma a permitir o usuário:
 - Add: Adicionar uma nova curva customizada ao sistema;
 - Edit: Inicialmente pensado em para permitir ao usuário editar curvas salvas, posteriormente alterado para permitir que o usuário seleciona qual curva customizada será enviada para o sistema, esta alteração ocorreu devido a mudança de local de armazenamento das curvas(inicialmente ESP, posteriormente rasp junto a aplicação de controle);
 Devido a estratégia de operação via interface gráfica, os estados ADD e EDIT ficaram semelhantes e representam apenas um ponto de espera onde o ESP aguarda os dados tratados pela interface com usuário;
 #
-![ADD](imagens/ITEMIS_CFG_ADD.PNG)
-![EDIT](imagens/ITEMIS_CFG_EDIT.PNG)
+![ADD](Imagens/ITEMIS_CFG_ADD.PNG)
+![EDIT](Imagens/ITEMIS_CFG_EDIT.PNG)
 #
