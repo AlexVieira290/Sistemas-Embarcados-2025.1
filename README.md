@@ -123,3 +123,387 @@ Para que este fluxo funcione corretamente foram necessárias estabelecer algumas
 |operation verificarProximoDegrau(curvaId: integer)                | verifica a existência de um próximo degrau|
 #
 Estas operações foram posteriormente implementadas nos código **CallbackController.cpp** e **CallbackController.H**
+
+## Etapa 2 - Implementação de callbacks em C++
+
+Das operações criadas para este projeto, algumas utilizaram os exemplos básicos da arquitetura Arduino IDE, portando não entrarei em detalhes nesta descrição. Todas funções utilizadas no projeto estarão disponíveis através do link [Projeto_final_ESP](https://github.com/AlexVieira290/Sistemas-Embarcados-2025.1/tree/main/Projeto_final_ESP "Projeto_final_ESP"), nos arquivos **CallbackController.cpp** e **CallbackController.H**.
+
+A seguir vou descrever as principais funções criadas para o projeto:
+
+
+ 1. carregarCurvaDefault: Esta função é utilizada para durante a inicialização criar a curva padrão, requisito do projeto. Esta armazena os valores em um struct conforme descrito abaixo:
+```C++
+//======= struct para curvas
+struct CurvaPonto {
+  float temperatura;
+  String tempo;
+};
+
+struct Curva {
+  std::vector<CurvaPonto> pontos;
+};
+//=================================
+
+void CallbackController::carregarCurvaDefault() {
+    curvaDefault.pontos.clear();
+    curvaDefault.pontos.push_back({67.0, "01:00"});     //valor acordado como default 67, tempo selecionado apenas para facilitar simulação
+    curvaDefault.pontos.push_back({72.0, "03:00"});     //valor acordado como default 78, tempo selecionado apenas para facilitar simulação
+    curvaDefault.pontos.push_back({77.0, "03:00"});    //valor acordado como default 100, tempo selecionado apenas para facilitar simulação
+    Serial.println("Curva default carregada via código.");
+}
+```
+
+ 2. carregarCurva e carregarCurvaTemperatura: São utilizadas para receber, verificar e carregar os valores recebidos via JSON para a curva personalizada,**carregarCurvaTemperatura** verifica se a mensagem recebida via UART possui os parâmetros do JSON necessarios, em caso de erro loga e descarta a mensagem recebida. Em caso de sucesso, chama a função **carregarCurva**, esta efetivamente le o JSON e aloca os valores no struct destinado a curva destino.
+
+```C++
+sc_string CallbackController::carregarCurvaTemperatura(sc_string comando) {
+    String jsonStr(comando);
+    // verifica se inicia e termina com "{ }"
+    if (!jsonStr.startsWith("{") || !jsonStr.endsWith("}")) {
+        return "";
+    }
+    
+    StaticJsonDocument<2048> doc;
+    DeserializationError error = deserializeJson(doc, jsonStr);
+    if (error) {
+        Serial.print("Erro ao fazer parse do JSON: ");
+        Serial.println(error.c_str());
+        return "";
+    }
+    // verifica se possui o identificador "curva_temperatura"
+    if (!doc.containsKey("curva_temperatura") || !doc["curva_temperatura"].is<JsonArray>()) {
+        Serial.println("JSON inválido: chave 'curva_temperatura' ausente ou não é array.");
+        return "";
+    }
+    // verifica se possui os campos "temperatura" e "tempo"
+    JsonArray curvaArray = doc["curva_temperatura"];
+    for (JsonObject ponto : curvaArray) {
+        if (!ponto.containsKey("temperatura") || !ponto.containsKey("tempo")) {
+            Serial.println("JSON inválido: um ou mais pontos estão incompletos.");
+            return "";
+        }
+    }
+    // executando a carga para o struct de curva personalizada
+    carregarCurva(jsonStr, curvaPersonalizada);
+    return "criado";
+}
+
+void carregarCurva(const String& jsonStr, Curva& curvaDestino) {
+    StaticJsonDocument<2048> doc;
+    // carrega a string recebida
+    DeserializationError error = deserializeJson(doc, jsonStr);
+    if (error) {
+        Serial.print(F("Erro ao fazer parse do JSON: "));
+        Serial.println(error.c_str());
+        return;
+    }
+    //Alocação na struct
+    std::vector<CurvaPonto>().swap(curvaDestino.pontos);
+    JsonArray array = doc["curva_temperatura"];
+    for (JsonObject ponto : array) {
+        CurvaPonto novoPonto;
+        novoPonto.temperatura = ponto["temperatura"];
+        novoPonto.tempo = ponto["tempo"].as<String>();
+        curvaDestino.pontos.push_back(novoPonto);
+    }
+    Serial.println(F("Curva carregada com sucesso."));
+}
+```
+ 3. **temperaturaTask** e **readTemperatureFromSensor**: São utilizadas para realizar as leituras de temperatura, devido a dificultadas enfrentadas na implementação do i2C slave(simulador de sensores de temperatura) estas estão simulando a leitura via UART. 
+ **temperaturaTask**: implementa especificamente uma task periódica que realiza um medição dos sensores, após realizar a aquisição dos valores, calcula a media dos últimos 5 valores de cada sensor, e verifica se a diferença entre a media do sensor 1 e 2 é maior que 2 graus. A media de 5 valores foi adotada para evitar que variações bruscas de temperatura possam afetar a operação do sistema, a verificação da diferença é utilizada para verificar a necessidade de acionar a bomba e o mixer, realizar a equalização da temperatura da panela.
+ **readTemperatureFromSensor**: implementa expecificamente a leitura de sensores, esta função que precisaria ser alterada para migrar o projeto para i2c, neste momento ela esta requisitando o valor de temperatura via UART enviando a string "TEMPERATURA1\n" ou "TEMPERATURA2\n", identificando para o rasp que deve responder a temperatura simulada para o sensor requisitado.
+```C++
+float CallbackController::readTemperatureFromSensor(int sensorId) {
+    const char* cmd = (sensorId == 1) ? "TEMPERATURA1\n" : "TEMPERATURA2\n";
+    Serial.println(cmd);
+    unsigned long start = millis();
+
+    while (millis() - start < 1000) {
+        sc_string resposta = UART_read();
+        if (resposta && strlen(resposta) > 0) {
+            return atof(resposta);
+        }
+        delay(10);
+    }
+    Serial.println("Timeout na leitura do sensor!");
+    return NAN;
+}
+
+float CallbackController::calcMedia(float* vetor) {
+    float soma = 0;
+    for (int i = 0; i < VEC_SIZE; i++) {
+        soma += vetor[i];
+    }
+    return soma / VEC_SIZE;
+}
+
+void CallbackController::temperaturaTask(void* pvParameters) {
+    CallbackController* self = static_cast<CallbackController*>(pvParameters);
+    Statechart* sm = self->getStateMachine(); // Get state machine pointer
+
+    while (true) {
+        float t1 = self->readTemperatureFromSensor(1);
+        delay(100);
+        float t2 = self->readTemperatureFromSensor(2);
+        if (t1 > 0.1 && t2 > 0.1) {  // Considera válidas apenas temperaturas acima de 0.1 °C
+            temp1[index] = t1;
+            temp2[index] = t2;
+            index = (index + 1) % VEC_SIZE;
+            self->contaerros = 0; // resetando contador de erros
+        } else {
+            Serial.println("Leituras descartadas por erro de comunicação.");
+            self->contaerros++; // Increment counter
+            if (self->contaerros >= 10) {
+                Serial.println("10 leituras descartadas consecutivamente!");
+                if (sm) {
+                    sm->raiseErrodetectado(); // Raise the event
+                }
+                self->contaerros = 0; // Reset counter after raising event
+            }
+        }
+
+        float media1 = self->calcMedia(temp1);
+        float media2 = self->calcMedia(temp2);
+        float diff = fabs(media1 - media2);
+
+        //Serial.printf("Média T1: %.2f°C | T2: %.2f°C | Diferença: %.2f°C\n", media1, media2, diff);
+
+        if (diff > 2.0) {
+            self->digitalWrite(PINO_BOMBA, LOW);   // Liga bomba
+            self->digitalWrite(PINO_MIXER, LOW);   // Liga mixer
+        } else {
+            self->digitalWrite(PINO_BOMBA, HIGH);    // Desliga bomba
+            self->digitalWrite(PINO_MIXER, HIGH);    // Desliga mixer
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(TEMP_TASK_DELAY_MS));
+    }
+}
+```
+
+ 4. **taskDegrauPID**: task periódica responsável por implementar o controle PID, controlando o PWM para realizar o aquecimento até a temperatura desejada. Implementada utilizando a biblioteca PID_v1, também implementa uma verificação para o caso do aquecimento estar ativo e a temperatura não subir. Caso esta situação se mantenha por 24 ciclos( aproximadamente 2 minutos ) é acionando uma flag de erro e o processo é interrompido.
+```C++
+void CallbackController::taskDegrauPID(void* pvParameters) {
+    TaskParamsID* params = static_cast<TaskParamsID*>(pvParameters);
+    CallbackController* self = params->controller;
+    int curvaId = params->curvaId;
+
+    Curva* curva = (curvaId == 1) ? &curvaPersonalizada : &curvaDefault;
+    setpoint = curva->pontos[pontoIndex].temperatura;
+    
+    delete params;
+    // Reset do PID
+    pid.SetMode(MANUAL);
+    pid.SetOutputLimits(0, 255);
+    output = 0;
+
+    pid.SetMode(AUTOMATIC);
+    pid.SetOutputLimits(0, 255);
+
+    Statechart* sm = self->getStateMachine();
+    Serial.printf("Aquecimento iniciado - Target: %.2f °C\n", setpoint);
+
+    self->ultimatemperatura = (self->calcMedia(temp1) + self->calcMedia(temp2)) / 2.0; // Initialize with current temp
+    self->contaerrosdegrau = 0;
+
+    while (true) {
+        // Atualiza a variável de entrada com a média dos sensores
+        input = (self->calcMedia(temp1) + self->calcMedia(temp2)) / 2.0;
+        Serial.printf("Valor atual: %.2f °C\n", input); // apenas para DEBUG
+
+        pid.Compute();  // Calcula o novo valor de saída
+
+        ledcWrite(PINO_PWM_AQUECEDOR, (int)output);  // Aplica o valor PWM
+
+        // Verificar erro de aquecimento
+        if (output > (0.01 * 255) && input < self->ultimatemperatura) {
+            self->contaerrosdegrau++;
+            if (self->contaerrosdegrau >= 24) { // verificar 2 minutos
+                Serial.println("Erro: Possivel erro na resistencia.");
+                if (sm) sm->raiseErrodetectado();
+                self->contaerrosdegrau = 0; // Resetando o contador
+                self->taskDegrauHandle = nullptr;
+                vTaskDelete(NULL);
+            }
+        } else {
+            self->contaerrosdegrau = 0; // Resetando o contador
+        }
+        
+        self->ultimatemperatura = input; // atualizando o buffer
+
+        if (fabs(setpoint - input) < 0.5) {
+            Serial.println("Setpoint alcançado.");
+            if (sm) sm->raiseDegrau_ok();
+            self->taskDegrauHandle = nullptr;
+            vTaskDelete(NULL);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(TEMP_TASK_DELAY_MS)); // intervalo padronizado com a leitura
+    }
+}
+```
+ 5. **taskManutencao**: inicialmente era parte da task anterior, porem para descartar os erros acumulados no controle PID e facilitar o inicio da contagem de tempo foi separada em sua própria task com objetivo de manter a temperatura durante o tempo estabelecido.
+Possui o mesmo controle para o caso de erro com o aquecedor descrito anteriormente.
+```C++
+void CallbackController::taskManutencao(void* pvParameters) {
+    TaskParamsID* params = static_cast<TaskParamsID*>(pvParameters);
+    CallbackController* self = params->controller;
+    int curvaId = params->curvaId;
+
+    Curva* curva = (curvaId == 1) ? &curvaPersonalizada : &curvaDefault;
+    setpoint = curva->pontos[pontoIndex].temperatura;
+    String tempoStr = curva->pontos[pontoIndex].tempo;
+    int tempoMs = tempoParaSegundos(tempoStr) * 1000;
+
+    delete params;
+
+    Statechart* sm = self->getStateMachine();
+
+    // Reset do PID
+    pid.SetMode(MANUAL);
+    pid.SetOutputLimits(0, 255);
+    output = 0;
+
+    pid.SetMode(AUTOMATIC);
+    pid.SetOutputLimits(0, 255);
+
+    unsigned long inicio = millis();
+    int printCounter = 0;
+
+    self->ultimatemperatura = (self->calcMedia(temp1) + self->calcMedia(temp2)) / 2.0; // Initialize with current temp
+    self->contaerrosdegrau = 0;
+
+    while (true) {
+        input = (self->calcMedia(temp1) + self->calcMedia(temp2)) / 2.0;
+        Serial.printf("Valor atual: %.2f °C\n", input); // apenas para DEBUG
+        pid.Compute();
+        ledcWrite(PINO_PWM_AQUECEDOR, (int)output);
+
+        // Verificar erro de aquecimento
+        if (output > (0.01 * 255) && input < self->ultimatemperatura) {
+            self->contaerrosdegrau++;
+            if (self->contaerrosdegrau >= 24) { // verificar 2 minutos
+                Serial.println("Erro: Possivel erro na resistencia.");
+                if (sm) sm->raiseErrodetectado();
+                self->contaerrosdegrau = 0; // Resetando o contador
+                self->taskManutencaoHandle = nullptr;
+                vTaskDelete(NULL);
+            }
+        } else {
+            self->contaerrosdegrau = 0; // Resetando o contador
+        }
+        
+        self->ultimatemperatura = input; // atualizando o buffer
+
+        // Tempo decorrido e total
+        unsigned long agora = millis();
+        int decorrido = (agora - inicio) / 1000;
+        int total = tempoMs / 1000;
+
+        // Exibe tempo a cada ciclo
+        if (printCounter++ % 4 == 0) {
+            Serial.printf("Tempo: %ds de %ds (%.1f%%)\n", decorrido, total, (decorrido * 100.0) / total);
+        }
+
+        if (agora - inicio >= tempoMs) {
+            Serial.println("Tempo de manutenção encerrado.");
+            if (sm) sm->raiseManutencao_ok();
+            self->taskManutencaoHandle = nullptr;
+            vTaskDelete(NULL); // Encerra a task
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(TEMP_TASK_DELAY_MS)); // intervalo padronizado com a leitura
+    }
+}
+```
+ 6. **Controle de tasks freeRTOS**: Para todas as tasks mencionadas acima foram criadas as suas respectivas chamadas para inicialização e finalização das tasks no freeRTOS.
+```C++
+// ======= CHAMADA PARA INICIAR AS TASKS DIRETAMENTE DO CALLBACK =======
+void CallbackController::iniciarLeituraTemperatura() {
+    if (tempTaskHandle == nullptr) {
+        index = 0;
+        xTaskCreatePinnedToCore(
+            temperaturaTask,
+            "TempTask",
+            4096,
+            this,
+            1,
+            &tempTaskHandle,
+            APP_CPU_NUM
+        );
+        Serial.println("Task de temperatura iniciada");
+    }
+}
+
+void CallbackController::iniciarTaskDegrau(sc_integer curvaId) {
+    if (taskDegrauHandle == nullptr) {
+        TaskParamsID* params = new TaskParamsID{this, curvaId};
+        xTaskCreatePinnedToCore(
+            CallbackController::taskDegrauPID,
+            "TaskDegrauPID",
+            4096,
+            params,
+            1,
+            &taskDegrauHandle,
+            APP_CPU_NUM
+        );
+    }
+}
+
+void CallbackController::iniciarTaskManutencao(sc_integer curvaId) {
+    if (taskManutencaoHandle == nullptr) {
+        TaskParamsID* params = new TaskParamsID{this, curvaId};
+        xTaskCreatePinnedToCore(
+            CallbackController::taskManutencao,
+            "TaskManutencao",
+            4096,
+            params,
+            1,
+            &taskManutencaoHandle,
+            APP_CPU_NUM
+        );
+    }
+}
+
+// ======= FUNÇÕES PARA ENCERRAR TASKS EM CASO DE PROBLEMAS =======
+void CallbackController::encerrarTaskDegrau() {
+    if (taskDegrauHandle != nullptr) {
+        vTaskDelete(taskDegrauHandle);
+        taskDegrauHandle = nullptr;
+        Serial.println("Task Degrau encerrada.");
+    }
+}
+
+void CallbackController::encerrarTaskManutencao() {
+    if (taskManutencaoHandle != nullptr) {
+        vTaskDelete(taskManutencaoHandle);
+        taskManutencaoHandle = nullptr;
+        Serial.println("Task Manutenção encerrada.");
+    }
+}
+
+void CallbackController::pararLeituraTemperatura() {
+    if (tempTaskHandle != nullptr) {
+        vTaskDelete(tempTaskHandle);
+        tempTaskHandle = nullptr;
+        Serial.println("Task de temperatura encerrada");
+    }
+}
+```
+## Etapa 3 - Implementação do App de controle python
+
+Para realizar o controle do projeto via rasberry foi implementado app com interface gráfica utilizando **tkinter** [Projeto_final_ESP](https://github.com/AlexVieira290/Sistemas-Embarcados-2025.1/tree/main/Projeto_final_ESP "Projeto_final_ESP"), este aplicativo consiste em, **Interface de controle para o usuário**,**Feedback visual da operação**, **Simulador de sensores de temperatura** e um **Leitor de PWM**(utilizado pelo simulador de sensores).
+
+ 1. **Ponto 1**: continuar descrição pwmreader.
+```python
+class PwmReader:
+    def __init__(self, gpio_pin):
+        self.pi = pigpio.pi()
+        self.gpio_pin = gpio_pin
+        self.high_time = 0
+        self.low_time = 0
+        self.last_tick = 0
+        self.level = 0
+        self.duty_cycle = 0
+        self.last_update = time.time()
+```
