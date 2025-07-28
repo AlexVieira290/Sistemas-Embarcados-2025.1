@@ -85,11 +85,11 @@ class SimuladorTemperatura(threading.Thread):
 
             if pwm_ativo:
                 diff = self.temp_ambiente - self.temp_cpu
-                if not bomba_on and not misturador_on:
+                if bomba_on and misturador_on:
                     # Cria diferença artificial: temp1 aumenta mais que temp2
                     delta1 = (duty / 100) * 1.2
                     delta2 = ((duty / 100) * 0.4) + diff * 0.05
-                elif bomba_on and misturador_on:
+                elif not bomba_on and not misturador_on:
                     # Convergência: reduz diferença entre temp1 e temp2
                     ajuste = (duty / 100) * 0.6
 
