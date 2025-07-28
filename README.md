@@ -494,7 +494,7 @@ void CallbackController::pararLeituraTemperatura() {
 
 Para realizar o controle do projeto via rasberry foi implementado app com interface gráfica utilizando **tkinter** [Projeto_final_ESP](https://github.com/AlexVieira290/Sistemas-Embarcados-2025.1/tree/main/Projeto_final_ESP "Projeto_final_ESP"), este aplicativo consiste em, **Interface de controle para o usuário**,**Feedback visual da operação**, **Simulador de sensores de temperatura** e um **Leitor de PWM**(utilizado pelo simulador de sensores).
 
- 1. **Ponto 1**: continuar descrição pwmreader.
+ 1. **PwmReader**: Responsável por realizar a leitura do sinal PWM gerado pelo ESP32. A leitura é feita utilizando um dos pinos do Raspberry Pi e permite calcular o duty cycle aplicado no aquecimento. A classe monitora continuamente o sinal e disponibiliza esse valor, representando o percentual de tempo em que o sinal permanece em nível alto. Essa leitura é essencial para simular uma reação ao PWM imposto pelo controle PID no ESP32.
 ```python
 class PwmReader:
     def __init__(self, gpio_pin):
@@ -506,4 +506,133 @@ class PwmReader:
         self.level = 0
         self.duty_cycle = 0
         self.last_update = time.time()
+
+        self.cb = self.pi.callback(self.gpio_pin, pigpio.EITHER_EDGE, self._cb)
+
+    def _cb(self, gpio, level, tick):
+        if self.last_tick == 0:
+            self.last_tick = tick
+            self.level = level
+            return
+
+        dt = pigpio.tickDiff(self.last_tick, tick)
+        self.last_tick = tick
+
+        if self.level == 1:
+            self.high_time = dt
+        else:
+            self.low_time = dt
+
+        self.level = level
+
+        total = self.high_time + self.low_time
+        if total > 0:
+            self.duty_cycle = (self.high_time / total) * 100
+            self.last_update = time.time()
+
+    def get_duty_cycle(self):
+        # timeout de 1 segundo para sinal perdido
+        if time.time() - self.last_update > 1:
+            if self.pi.read(self.gpio_pin) == 1:
+                return 100.0  # PWM travado em nível alto
+            else:
+                return 0.0  # PWM travado em nível baixo (0%)
+        return round(self.duty_cycle, 2)
+
+    def stop(self):
+        self.cb.cancel()
+        self.pi.stop()
 ```
+ 2. **SimuladorTemperatura**: criada para simular sensores de temperatura, esta simulação é utilizada nos testes quando não se possui acesso aos sensores I2C. Esta classe roda em uma thread separada, evitando travamentos na interface principal e permitindo que a simulação ocorra em paralelo com a execução da aplicação. Os valores simulados variam ao longo do tempo em função do duty cycle aplicado, da diferença entre os sensores e do estado dos atuadores (bomba e misturador).
+
+A lógica implementada:
+
+- Quando bomba e misturador estão ativos, o sensor do fundo da panela (temp_ambiente) é aquecido mais intensamente que o sensor superior (temp_cpu), simulando um aquecimento com convecção forçada parcial;
+- Quando ambos estão desligados, o sistema força a equalização das temperaturas, simulando a condução térmica natural;
+- Quando apenas um dos atuadores está ativo, ambos os sensores aumentam a temperatura de forma mais lenta e equilibrada.
+
+Em todos os casos, o duty cycle influencia diretamente na variação, quanto maior o duty, maior o delta aplicado. 
+Em situações de resfriamento (duty = 0), a temperatura decresce gradualmente até um valor mínimo estabelecido (20 °C), simulando a perda térmica natural.
+
+Essa abordagem foi adotada para facilitar a visualização da atuação do controle PID e das condições de operação do sistema.
+```python
+class SimuladorTemperatura(threading.Thread):
+    def __init__(self, pwm_reader):
+        super().__init__(daemon=True)
+        self.executando = True
+        self.pwm_reader = pwm_reader
+        self.temp_ambiente = 64
+        self.temp_cpu = 64
+
+    def parar(self):
+        self.executando = False
+        self.pwm_reader.stop()
+
+    def run(self):
+        while self.executando:
+            duty = self.pwm_reader.get_duty_cycle()
+            pwm_ativo = duty > 0
+
+            bomba_on = bomba.is_active
+            misturador_on = misturador.is_active
+
+            if pwm_ativo:
+                diff = self.temp_ambiente - self.temp_cpu
+                if bomba_on and misturador_on:
+                    # Cria diferença artificial: temp1 aumenta mais que temp2
+                    delta1 = (duty / 100) * 1.2
+                    delta2 = ((duty / 100) * 0.4) + diff * 0.05
+                elif not bomba_on and not misturador_on:
+                    # Convergência: reduz diferença entre temp1 e temp2
+                    ajuste = (duty / 100) * 0.6
+
+                    if diff > 0:
+                        delta1 = -ajuste
+                        delta2 = ajuste
+                    elif diff < 0:
+                        delta1 = ajuste
+                        delta2 = -ajuste
+                    else:
+                        delta1 = delta2 = (duty / 100) * 0.5
+                else:
+                    # Caso intermediário: sobe normalmente
+                    delta1 = delta2 = (duty / 100) * 0.6
+            else:
+                # PWM = 0 → Esfriamento padrão
+                ambient_floor = 20.0  # mínimo realista
+                delta1 = -0.2 if self.temp_ambiente > ambient_floor else 0
+                if self.temp_cpu > self.temp_ambiente:
+                    delta2 = -0.2
+                else:
+                    delta2 = -0.05
+
+            self.temp_ambiente = max(0, min(100, self.temp_ambiente + delta1 * 0.1))
+            self.temp_cpu = max(0, min(100, self.temp_cpu + delta2 * 0.1))
+
+            global temperatura_simulada_1, temperatura_simulada_2
+            temperatura_simulada_1 = self.temp_ambiente
+            temperatura_simulada_2 = self.temp_cpu
+
+            root.after(0, lambda: pwm_progressbar.config(value=duty))
+            root.after(0, lambda: pwm_percentage_label.config(text=f"{duty:.1f}%"))
+
+            root.after(0, lambda: label_temp_ambiente.config(text=f"Sensor Panela - Fundo: {self.temp_ambiente:.1f} °C"))
+            root.after(0, lambda: label_temp_cpu.config(text=f"Sensor Panela - Superior: {self.temp_cpu:.1f} °C"))
+
+            time.sleep(1)
+```
+
+ 3. **toggle_simulador**: responsável por ativar ou desativar a simulação de temperatura. Caso a implementação do simulador I2C tivesse ocorrido com sucesso, seria possivel ativar e desativar a simulação para momentos em que se tem acesso aos sensores.
+```python
+def toggle_simulador():
+    global simulador
+    if simulador_var.get():
+        pwm_reader = PwmReader(gpio_pin=18)
+        simulador = SimuladorTemperatura(pwm_reader)
+        simulador.start()
+    else:
+        if simulador:
+            simulador.parar()
+            simulador = None
+```
+
