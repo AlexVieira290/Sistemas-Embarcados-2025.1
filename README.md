@@ -19,6 +19,15 @@ O sistema permite:
 
 
 ---
+
+## Índice
+
+- [Requisitos Minimos](#requisitos-m%C3%ADnimos)
+- [Funcionalidades](#funcionalidades)
+- [Instalação](#instalação)
+- [Demonstração](#demonstração)
+- [Considerações Finais](#considerações-finais)
+
 ## Requisitos mínimos
 
 - Interfaces: 
@@ -147,6 +156,10 @@ A seguir vou descrever as principais funções criadas para o projeto:
 
 
  1. carregarCurvaDefault: Esta função é utilizada para durante a inicialização criar a curva padrão, requisito do projeto. Esta armazena os valores em um struct conforme descrito abaixo:
+---
+<details>
+  <summary>Ver códigos: </span></summary>
+
 ```C++
 //======= struct para curvas
 struct CurvaPonto {
@@ -167,8 +180,14 @@ void CallbackController::carregarCurvaDefault() {
     Serial.println("Curva default carregada via código.");
 }
 ```
+</details>
+
+---
 
  2. carregarCurva e carregarCurvaTemperatura: São utilizadas para receber, verificar e carregar os valores recebidos via JSON para a curva personalizada,**carregarCurvaTemperatura** verifica se a mensagem recebida via UART possui os parâmetros do JSON necessarios, em caso de erro loga e descarta a mensagem recebida. Em caso de sucesso, chama a função **carregarCurva**, esta efetivamente le o JSON e aloca os valores no struct destinado a curva destino.
+---
+<details>
+  <summary>Ver códigos: </span></summary>
 
 ```C++
 sc_string CallbackController::carregarCurvaTemperatura(sc_string comando) {
@@ -224,9 +243,16 @@ void carregarCurva(const String& jsonStr, Curva& curvaDestino) {
     Serial.println(F("Curva carregada com sucesso."));
 }
 ```
+</details>
+
+---
  3. **temperaturaTask** e **readTemperatureFromSensor**: São utilizadas para realizar as leituras de temperatura, devido a dificultadas enfrentadas na implementação do i2C slave(simulador de sensores de temperatura) estas estão simulando a leitura via UART. 
  **temperaturaTask**: implementa especificamente uma task periódica que realiza um medição dos sensores, após realizar a aquisição dos valores, calcula a media dos últimos 5 valores de cada sensor, e verifica se a diferença entre a media do sensor 1 e 2 é maior que 2 graus. A media de 5 valores foi adotada para evitar que variações bruscas de temperatura possam afetar a operação do sistema, a verificação da diferença é utilizada para verificar a necessidade de acionar a bomba e o mixer, realizar a equalização da temperatura da panela.
  **readTemperatureFromSensor**: implementa expecificamente a leitura de sensores, esta função que precisaria ser alterada para migrar o projeto para i2c, neste momento ela esta requisitando o valor de temperatura via UART enviando a string "TEMPERATURA1\n" ou "TEMPERATURA2\n", identificando para o rasp que deve responder a temperatura simulada para o sensor requisitado.
+---
+<details>
+  <summary>Ver códigos: </span></summary>
+
 ```C++
 float CallbackController::readTemperatureFromSensor(int sensorId) {
     const char* cmd = (sensorId == 1) ? "TEMPERATURA1\n" : "TEMPERATURA2\n";
@@ -295,8 +321,15 @@ void CallbackController::temperaturaTask(void* pvParameters) {
     }
 }
 ```
+</details>
+
+---
 
  4. **taskDegrauPID**: task periódica responsável por implementar o controle PID, controlando o PWM para realizar o aquecimento até a temperatura desejada. Implementada utilizando a biblioteca PID_v1, também implementa uma verificação para o caso do aquecimento estar ativo e a temperatura não subir. Caso esta situação se mantenha por 24 ciclos( aproximadamente 2 minutos ) é acionando uma flag de erro e o processo é interrompido.
+---
+<details>
+  <summary>Ver códigos: </span></summary>
+
 ```C++
 void CallbackController::taskDegrauPID(void* pvParameters) {
     TaskParamsID* params = static_cast<TaskParamsID*>(pvParameters);
@@ -357,8 +390,15 @@ void CallbackController::taskDegrauPID(void* pvParameters) {
     }
 }
 ```
+</details>
+
+---
  5. **taskManutencao**: inicialmente era parte da task anterior, porem para descartar os erros acumulados no controle PID e facilitar o inicio da contagem de tempo foi separada em sua própria task com objetivo de manter a temperatura durante o tempo estabelecido.
 Possui o mesmo controle para o caso de erro com o aquecedor descrito anteriormente.
+---
+<details>
+  <summary>Ver códigos: </span></summary>
+
 ```C++
 void CallbackController::taskManutencao(void* pvParameters) {
     TaskParamsID* params = static_cast<TaskParamsID*>(pvParameters);
@@ -431,7 +471,14 @@ void CallbackController::taskManutencao(void* pvParameters) {
     }
 }
 ```
+</details>
+
+---
  6. **Controle de tasks freeRTOS**: Para todas as tasks mencionadas acima foram criadas as suas respectivas chamadas para inicialização e finalização das tasks no freeRTOS.
+---
+<details>
+  <summary>Ver códigos: </span></summary>
+
 ```C++
 // ======= CHAMADA PARA INICIAR AS TASKS DIRETAMENTE DO CALLBACK =======
 void CallbackController::iniciarLeituraTemperatura() {
@@ -505,11 +552,19 @@ void CallbackController::pararLeituraTemperatura() {
     }
 }
 ```
+</details>
+
+---
+
 ## Etapa 3 - Implementação do App de controle python
 
 Para realizar o controle do projeto via rasberry foi implementado app com interface gráfica utilizando **tkinter** [Projeto_final_ESP](https://github.com/AlexVieira290/Sistemas-Embarcados-2025.1/tree/main/Projeto_final_ESP "Projeto_final_ESP"), este aplicativo consiste em, **Interface de controle para o usuário**,**Feedback visual da operação**, **Simulador de sensores de temperatura** e um **Leitor de PWM**(utilizado pelo simulador de sensores).
 
  1. **PwmReader**: Responsável por realizar a leitura do sinal PWM gerado pelo ESP32. A leitura é feita utilizando um dos pinos do Raspberry Pi e permite calcular o duty cycle aplicado no aquecimento. A classe monitora continuamente o sinal e disponibiliza esse valor, representando o percentual de tempo em que o sinal permanece em nível alto. Essa leitura é essencial para simular uma reação ao PWM imposto pelo controle PID no ESP32.
+---
+<details>
+  <summary>Ver código de PwmReader</span></summary>
+
 ```python
 class PwmReader:
     def __init__(self, gpio_pin):
@@ -558,6 +613,10 @@ class PwmReader:
         self.cb.cancel()
         self.pi.stop()
 ```
+</details>
+
+---
+
  2. **SimuladorTemperatura**: criada para simular sensores de temperatura, esta simulação é utilizada nos testes quando não se possui acesso aos sensores I2C. Esta classe roda em uma thread separada, evitando travamentos na interface principal e permitindo que a simulação ocorra em paralelo com a execução da aplicação. Os valores simulados variam ao longo do tempo em função do duty cycle aplicado, da diferença entre os sensores e do estado dos atuadores (bomba e misturador).
 
 A lógica implementada:
@@ -570,6 +629,11 @@ Em todos os casos, o duty cycle influencia diretamente na variação, quanto mai
 Em situações de resfriamento (duty = 0), a temperatura decresce gradualmente até um valor mínimo estabelecido (20 °C), simulando a perda térmica natural.
 
 Essa abordagem foi adotada para facilitar a visualização da atuação do controle PID e das condições de operação do sistema.
+
+---
+<details>
+  <summary>Ver código de SimuladorTemperatura</span></summary>
+
 ```python
 class SimuladorTemperatura(threading.Thread):
     def __init__(self, pwm_reader):
@@ -636,8 +700,14 @@ class SimuladorTemperatura(threading.Thread):
 
             time.sleep(1)
 ```
+</details>
 
+---
  3. **toggle_simulador**: responsável por ativar ou desativar a simulação de temperatura. Caso a implementação do simulador I2C tivesse ocorrido com sucesso, seria possivel ativar e desativar a simulação para momentos em que se tem acesso aos sensores.
+---
+<details>
+  <summary>Ver código de toggle_simulador</span></summary>
+
 ```python
 def toggle_simulador():
     global simulador
@@ -650,4 +720,16 @@ def toggle_simulador():
             simulador.parar()
             simulador = None
 ```
+</details>
 
+---
+
+## Considerações finais
+
+A execução deste projeto proporcionou a oportunidade de desenvolver um sistema embarcado para controle de temperatura, aplicando não apenas os conceitos abordados ao longo do curso, mas também explorando o uso da ferramenta Itemis (Yakindu) para modelagem de estados.
+
+Durante a implementação do requisito de comunicação via I²C, surgiram dificuldades que impediram o sincronismo adequado entre o Raspberry Pi e o ESP32. Em uma análise inicial, suspeita-se que essas falhas ocorreram, em grande parte, devido a problemas de alimentação no Raspberry Pi, resultando em instabilidade no processamento e, consequentemente, na comunicação.
+
+Diante disso, optou-se por utilizar comunicação via UART. Embora o sistema ainda tenha apresentado pequenas interferências provocadas pela instabilidade do Raspberry, os erros foram significativamente menores e puderam ser tratados de forma eficiente por meio de código.
+
+Para implementações futuras, seria possível retomar a abordagem com I²C utilizando um Raspberry Pi em boas condições de funcionamento. No entanto, uma alternativa mais robusta seria empregar um segundo ESP32 exclusivamente como escravo I²C. Essa segunda opção tende a oferecer maior confiabilidade e estabilidade na comunicação.
