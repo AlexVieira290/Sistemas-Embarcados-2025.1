@@ -15,11 +15,8 @@ O sistema permite:
 
 > 🔧 O sistema físico em operação, controlando a temperatura conforme o perfil definido:
 
-![Protótipo em funcionamento](./videos/prototipo.mp4)
+[![Watch the video](https://img.youtube.com/vi/pO3XyxYa414/hqdefault.jpg)](https://www.youtube.com/embed/pO3XyxYa414)
 
-> 💻 Interface gráfica do aplicativo de controle, mostrando os parâmetros em tempo real:
-
-![App em operação](imagens/app-demo.gif)
 
 ---
 ## Requisitos mínimos
