@@ -13,7 +13,7 @@ O sistema permite:
 
 ## Demonstração do Protótipo Final
 
-> 🔧 O sistema físico em operação, controlando a temperatura conforme o perfil definido:
+> Clique na imagem abaixo para assistir à demonstração do sistema físico em operação, executando a simulação do controle de temperatura conforme a curva padrão:
 
 [![Watch the video](https://img.youtube.com/vi/pO3XyxYa414/hqdefault.jpg)](https://www.youtube.com/embed/pO3XyxYa414)
 
