@@ -1,7 +1,25 @@
 
-# Sistemas-Embarcados-2025.1
+# Sistemas Embarcados - 2025.1
 
-Desenvolvimento de um sistema embarcado para o controle de curvas de temperatura para o processo de criação de cerveja.
+Este projeto consiste no desenvolvimento de um sistema embarcado completo para o **controle automático de curvas de temperatura**, voltado ao processo artesanal de produção de cerveja.
+
+O sistema permite:
+- Configurar curvas de temperatura com múltiplos estágios;
+- Monitorar e controlar o aquecimento com precisão via **controle PID**;
+- Visualizar o processo em tempo real através de uma **interface gráfica interativa**;
+- Operar com sensores simulados ou reais, ideal para testes e prototipagem com **ESP32** e **Raspberry Pi**.
+
+---
+
+## Demonstração do Protótipo Final
+
+> 🔧 O sistema físico em operação, controlando a temperatura conforme o perfil definido:
+
+![Protótipo em funcionamento](videos/prototipo.mp4)
+
+> 💻 Interface gráfica do aplicativo de controle, mostrando os parâmetros em tempo real:
+
+![App em operação](imagens/app-demo.gif)
 
 ---
 ## Requisitos mínimos
