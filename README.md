@@ -23,10 +23,13 @@ O sistema permite:
 ## Índice
 
 - [Requisitos Minimos](#requisitos-m%C3%ADnimos)
-- [Funcionalidades](#funcionalidades)
-- [Instalação](#instalação)
-- [Demonstração](#demonstração)
+- [Requisitos Adicionais](#requisitos-adicionais)
+- [Etapa 1 - Implementação de fluxograma Itemis](#etapa-1---implementa%C3%A7%C3%A3o-de-fluxograma-itemis)
+- [Etapa 2 - Implementação de callbacks em C++](#etapa-2---implementa%C3%A7%C3%A3o-de-callbacks-em-c)
+- [Etapa 3 - Implementação do App de controle python](#etapa-3---implementa%C3%A7%C3%A3o-do-app-de-controle-python)
 - [Considerações Finais](#considerações-finais)
+
+---
 
 ## Requisitos mínimos
 
